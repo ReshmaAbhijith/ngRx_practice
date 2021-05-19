@@ -1,13 +1,14 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Store } from '@ngrx/store';
+import { select, Store } from '@ngrx/store';
 
-import { Subscription } from 'rxjs';
+import { from, Observable, Subscription } from 'rxjs';
 
 import { Product } from '../product';
 import { ProductService } from '../product.service';
 
 import * as fromProduct from '../state/product.reducer';
 import * as productActions from '../state/product.actions';
+import { takeWhile } from 'rxjs/operators';
 
 @Component({
   selector: 'pm-product-list',
@@ -25,6 +26,9 @@ export class ProductListComponent implements OnInit, OnDestroy {
   // Used to highlight the selected product in the list
   selectedProduct: Product | null;
   sub: Subscription;
+  products$: Observable<Product[]>;
+  componentActive: boolean = true;
+  errorMessage$: Observable<string>;
 
   constructor(private productService: ProductService,
     private store: Store<fromProduct.State>) { }
@@ -33,19 +37,13 @@ export class ProductListComponent implements OnInit, OnDestroy {
     this.sub = this.productService.selectedProductChanges$.subscribe(
       currentProduct => this.selectedProduct = currentProduct
     );
+    this.products$ = this.store.pipe(select(fromProduct.getProducts));
+    this.errorMessage$ = this.store.pipe(select(fromProduct.getError));
 
-    this.productService.getProducts().subscribe({
-      next: (products: Product[]) => this.products = products,
-      error: err => this.errorMessage = err
+    this.store.dispatch(new productActions.Load());
+    this.store.pipe(select(fromProduct.getShowProductCode), takeWhile(() => this.componentActive)).subscribe((products) => {
+      this.displayCode = products;
     });
-
-    this.store.select(fromProduct.getShowProductCode).subscribe((products) => {
-        this.displayCode = products;
-    });
-  }
-
-  ngOnDestroy(): void {
-    this.sub.unsubscribe();
   }
 
   checkChanged(event): void {
@@ -66,6 +64,11 @@ export class ProductListComponent implements OnInit, OnDestroy {
   productSelected(product: Product): void {
     // this.productService.changeSelectedProduct(product);
     this.store.dispatch(new productActions.SetCurrentProduct(product));
+  }
+
+  ngOnDestroy(): void {
+    this.componentActive = false;
+    this.sub.unsubscribe();
   }
 
 }
